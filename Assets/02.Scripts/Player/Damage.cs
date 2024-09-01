@@ -1,63 +1,51 @@
 using System.Collections;
 using UnityEngine;
 using Photon.Pun;
-using Photon.Realtime;
 using Player = Photon.Realtime.Player;
 
 public class Damage : MonoBehaviourPunCallbacks
 {
-    // 사망 후 투명 처리를 위한 MeshRenderer 컴포넌트의 배열
-    private Renderer[] renderers;
+    GameManager _gameManager;
+    Transform tr;
+    Animator ani;
+    CharacterController cc;
+    Renderer[] rens;   //사망 후 투명처리를 위한 MeshRenderer 선언
 
-    // 캐릭터의 초기 생명치
-    private int initHp = 100;
-    // 캐릭터의 현재 생명치
-    public int currHp = 100;
+    int initHp = 100;
+    public int Hp = 0;
 
-    private Animator anim;
-    private CharacterController cc;
-
-    // 애니메이터 뷰에 생성한 파라미터의 헤시값 추출
-    private readonly int hashDie = Animator.StringToHash("Die");
-    private readonly int hashRespawn = Animator.StringToHash("Respawn");
-
-    // GameManager 접근을 위한 변수
-    private GameManager gameManager;
+    #region hash Animation
+    readonly int hashDie = Animator.StringToHash("Die");
+    readonly int hashRespawn = Animator.StringToHash("Respawn");
+    #endregion
 
     void Awake()
     {
-        // 캐릭터 모델의 모든 Renderer 컴포넌트를 추출한 후 배열에 할당
-        renderers = GetComponentsInChildren<Renderer>();
-        anim = GetComponent<Animator>();
+        tr = transform;
+        rens = GetComponentsInChildren<Renderer>();
+        ani = GetComponent<Animator>();
         cc = GetComponent<CharacterController>();
+        _gameManager = GameObject.Find("GameManager").GetComponent<GameManager>();
 
-        //현재 생명치를 초기 생명치로 초깃값 설정
-        currHp = initHp;
-
-        gameManager = GameObject.Find("GameManager").GetComponent<GameManager>();
+        Hp = initHp;
     }
 
-    void OnCollisionEnter(Collision coll)
+    void OnCollisionEnter(Collision col)
     {
-        // 생명 수치가 0보다 크고 충돌체의 태그가 BULLET인 경우에 생명 수치를 차감
-        if (currHp > 0 && coll.collider.CompareTag("BULLET"))
+        if (Hp > 0 && col.collider.CompareTag("BULLET"))
         {
-            currHp -= 20;
-            if (currHp <= 0)
+            Hp -= 20;
+
+            if (Hp <= 0)
             {
-                // 자신의 PhotonView 일 때만 메시지를 출력
                 if (photonView.IsMine)
                 {
-                    // 총알의 ActorNumber를 추출
-                    var actorNo = coll.collider.GetComponent<Bullet>().actorNumber;
-                    // ActorNumber로 현재 룸에 입장한 플레이어를 추출
-                    Player lastShootPlayer = PhotonNetwork.CurrentRoom.GetPlayer(actorNo);
+                    var actorNo = col.collider.GetComponent<Bullet>().actorNumber;  //총알의 actorNumber를 추출하여 누가 발사했는지를 알아냄
+                    Player _player = PhotonNetwork.CurrentRoom.GetPlayer(actorNo);  //Photon 네트워크의 룸에서 발사자 가져오기
 
-                    // 메시지 출력을 위한 문자열 포맷
-                    string msg = string.Format("\n<color=#00ff00>{0}</color> is killed by <color=#ff0000>{1}</color>",
-                                                photonView.Owner.NickName,
-                                                lastShootPlayer.NickName);
-                    photonView.RPC("KillMessage", RpcTarget.AllBufferedViaServer, msg);
+                    string msg = $"\n<color=#00ff00>{photonView.Owner.NickName}</color> is killed by <color=#ff0000>{_player.NickName}</color>";
+                    
+                    photonView.RPC("KillMessage", RpcTarget.AllBufferedViaServer, msg);    //모든 클라이언트에게 메시지 전송
                 }
 
                 StartCoroutine(PlayerDie());
@@ -66,50 +54,34 @@ public class Damage : MonoBehaviourPunCallbacks
     }
 
     [PunRPC]
-    void KillMessage(string msg)
-    {
-        // 메시지 출력
-        gameManager.msgList.text += msg;
-    }
+    void KillMessage(string msg) => _gameManager.msgList.text += msg;
 
     IEnumerator PlayerDie()
     {
-        // CharacterController 컴포넌트 비활성화
         cc.enabled = false;
-        // 리스폰 비활성화
-        anim.SetBool(hashRespawn, false);
-        // 캐릭터 사망 애니메이션 실행
-        anim.SetTrigger(hashDie);
+        ani.SetBool(hashRespawn, false);    //respawn 비활성화
+        ani.SetTrigger(hashDie);
 
         yield return new WaitForSeconds(3.0f);
 
-        // 리스폰 활성화
-        anim.SetBool(hashRespawn, true);
+        ani.SetBool(hashRespawn, true);     //respawn 활성화
 
-        // 캐릭터 투명 처리
-        SetPlayerVisible(false);
+        SetPlayerVisible(false);    //캐릭터 투명하게 처리
 
         yield return new WaitForSeconds(1.5f);
 
-        // 생성 위치를 재조정
-        Transform[] points = GameObject.Find("SpawnPointGroup").GetComponentsInChildren<Transform>();    
+        Transform[] points = GameObject.Find("SpawnPointGroup").GetComponentsInChildren<Transform>();
         int idx = Random.Range(1, points.Length);
-        transform.position = points[idx].position;
+        tr.position = points[idx].position;
 
-        // 리스폰 시 생명 초깃값 설정
-        currHp = 100;
-        // 캐릭터를 다시 보이게 처리
-        SetPlayerVisible(true);
-        // CharacterController 컴포넌트 활성화
+        Hp = initHp;
+        SetPlayerVisible(true); //캐릭터 보이게 처리
         cc.enabled = true;
     }
 
-    //Renderer 컴포넌트를 활성/비활성화하는 함수
     void SetPlayerVisible(bool isVisible)
     {
-        for(int i=0; i<renderers.Length; i++)
-        {
-            renderers[i].enabled = isVisible;
-        }
+        for (int i = 0; i < rens.Length; i++)
+            rens[i].enabled = isVisible;
     }
 }
