@@ -29,10 +29,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         int idx = Random.Range(1, points.Length);
 
         // 네트워크상에 캐릭터 생성
-        PhotonNetwork.Instantiate("Player",
-                                  points[idx].position,
-                                  points[idx].rotation,
-                                  0); 
+        PhotonNetwork.Instantiate("Player", points[idx].position, points[idx].rotation, 0);
     }
 
     // 룸 접속 정보를 출력
@@ -63,7 +60,7 @@ public class GameManager : MonoBehaviourPunCallbacks
         msgList.text += msg;
     }
 
-    // 룸에서 네트워크 유저가 퇴장했때 호출되는 콜백함수
+    // 룸에서 네트워크 유저가 퇴장했을 때 호출되는 콜백함수
     public override void OnPlayerLeftRoom(Player otherPlayer)
     {
         SetRoomInfo();
